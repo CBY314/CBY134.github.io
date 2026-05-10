@@ -19,7 +19,6 @@
         .admin-panel button{padding:8px 12px;background:#67c23a;color:#fff;border:none;border-radius:4px;cursor:pointer;margin:5px;}
         .admin-del{background:#f56c6c !important;}
         .user-item{padding:10px;background:#f8f9fa;margin:6px 0;border-radius:4px;display:flex;justify-content:space-between;}
-        .admin-set{margin-top:15px;padding-top:15px;border-top:1px solid #eee;}
         .input-box{background:#fff;padding:20px;border-radius:10px;box-shadow:0 2px 8px #ccc;margin-bottom:20px;}
         textarea{width:100%;height:100px;padding:15px;border:1px solid #ddd;border-radius:6px;resize:none;font-size:16px;}
         .send-btn{margin-top:15px;padding:10px 30px;background:#409eff;color:#fff;border:none;border-radius:6px;cursor:pointer;}
@@ -41,68 +40,67 @@
         <div class="wall-wrap" id="wallBox">
             <button class="logout-btn" onclick="logout()">退出登录</button>
             <div class="admin-panel" id="adminPanel">
-                <h3>⚙️ 管理员管理中心</h3>
-                <div class="admin-set">
-                    <h4>修改管理员账号名</h4>
-                    <input type="text" id="newAdminName" placeholder="输入新管理员名称">
-                    <button onclick="changeAdminName()">确认修改</button>
-                </div>
-                <div style="margin-top:15px;">
-                    <input type="text" id="newU" placeholder="新增账号">
-                    <input type="password" id="newP" placeholder="密码">
-                    <button onclick="addUser()">添加账号</button>
-                </div>
-                <div style="margin-top:10px;">
-                    <input type="text" id="editU" placeholder="操作账号">
-                    <input type="password" id="editP" placeholder="新密码">
-                    <button onclick="modifyUser()">修改密码</button>
-                    <button onclick="removeUser()" class="admin-del">删除账号</button>
-                </div>
-                <div id="userListShow" style="margin-top:15px;"></div>
+                <h3>管理员中心</h3>
+                <input type="text" id="newU" placeholder="新增账号">
+                <input type="password" id="newP" placeholder="密码">
+                <button onclick="addUser()">添加账号</button>
+                <br><br>
+                <input type="text" id="editU" placeholder="修改账号">
+                <input type="password" id="editP" placeholder="新密码">
+                <button onclick="modifyPwd()">修改密码</button>
+                <button onclick="delUser()" style="background:#f56c6c;">删除账号</button>
+                <div id="userList" style="margin-top:15px;"></div>
             </div>
 
             <div class="input-box">
-                <textarea id="msgTxt" placeholder="写下留言..."></textarea>
-                <button class="send-btn" onclick="sendMsg()">提交留言</button>
+                <textarea id="content" placeholder="输入留言"></textarea>
+                <button class="send-btn" onclick="postMsg()">发布留言</button>
             </div>
             <div id="msgList"></div>
         </div>
     </div>
 
     <script>
-        let userList = [];
-        let msgList = [];
+        let users = [];
+        let msgs = [];
         let isAdmin = false;
-        let nowLoginUser = "";
-
-        const ADMIN_ACC = "CBY";
-        const ADMIN_PWD = "CBY888123";
+        let loginName = "";
 
         window.onload = function(){
-            // 强制重置管理员数据，杜绝旧缓存干扰
-            localStorage.removeItem("safeUserList");
-            userList = [{
-                name: ADMIN_ACC,
-                pwdMd5: md5(ADMIN_PWD),
-                admin: true
-            }];
-            localStorage.setItem("safeUserList", JSON.stringify(userList));
-            loadMsg();
+            loadUsers();
+            loadMsgs();
+        };
+
+        // 加载用户（修复：只初始化一次，不覆盖）
+        function loadUsers(){
+            let data = localStorage.getItem("users");
+            if(data){
+                users = JSON.parse(data);
+            }else{
+                // 初始化管理员
+                users = [{
+                    user:"CBY",
+                    pwd:md5("CBY888123"),
+                    admin:true
+                }];
+                saveUsers();
+            }
         }
 
-        function saveUser(){
-            localStorage.setItem("safeUserList", JSON.stringify(userList));
+        function saveUsers(){
+            localStorage.setItem("users",JSON.stringify(users));
         }
 
+        // ========== 登录（修复完成） ==========
         function login(){
             let u = document.getElementById("inpUser").value.trim();
             let p = document.getElementById("inpPwd").value.trim();
-            let pMd5 = md5(p);
+            let pmd5 = md5(p);
 
-            for(let item of userList){
-                if(item.name === u && item.pwdMd5 === pMd5){
-                    isAdmin = item.admin;
-                    nowLoginUser = u;
+            for(let i=0;i<users.length;i++){
+                if(users[i].user == u && users[i].pwd == pmd5){
+                    isAdmin = users[i].admin;
+                    loginName = u;
                     goHome();
                     return;
                 }
@@ -115,118 +113,103 @@
             document.getElementById("wallBox").style.display = "block";
             if(isAdmin){
                 document.getElementById("adminPanel").style.display = "block";
-                renderUserList();
+                showUserList();
             }else{
                 document.getElementById("adminPanel").style.display = "none";
             }
-            renderMsg();
+            showMsgs();
         }
 
         function logout(){
             location.reload();
         }
 
-        function changeAdminName(){
-            let newName = document.getElementById("newAdminName").value.trim();
-            if(!newName){alert("名称不能为空");return;}
-            if(userList.some(x=>x.name===newName)){alert("账号已占用");return;}
-            let admin = userList.find(x=>x.admin);
-            admin.name = newName;
-            nowLoginUser = newName;
-            saveUser();
-            alert("修改成功，请重新登录");
-            logout();
-        }
-
+        // ========== 管理员功能 ==========
         function addUser(){
             let u = document.getElementById("newU").value.trim();
             let p = document.getElementById("newP").value.trim();
             if(!u||!p){alert("不能为空");return;}
-            if(userList.some(x=>x.name===u)){alert("账号已存在");return;}
-            userList.push({name:u,pwdMd5:md5(p),admin:false});
-            saveUser();
+            for(let i=0;i<users.length;i++){
+                if(users[i].user==u){alert("已存在");return;}
+            }
+            users.push({user:u,pwd:md5(p),admin:false});
+            saveUsers();
             alert("添加成功");
             document.getElementById("newU").value="";
             document.getElementById("newP").value="";
-            renderUserList();
+            showUserList();
         }
 
-        function modifyUser(){
+        function modifyPwd(){
             let u = document.getElementById("editU").value.trim();
             let p = document.getElementById("editP").value.trim();
-            let item = userList.find(x=>x.name===u);
-            if(!item){alert("账号不存在");return;}
-            if(item.admin){alert("不能改管理员");return;}
-            item.pwdMd5 = md5(p);
-            saveUser();
-            alert("修改成功");
-            renderUserList();
+            for(let i=0;i<users.length;i++){
+                if(users[i].user==u){
+                    users[i].pwd=md5(p);
+                    saveUsers();
+                    alert("修改成功");
+                    showUserList();
+                    return;
+                }
+            }
+            alert("账号不存在");
         }
 
-        function removeUser(){
+        function delUser(){
             let u = document.getElementById("editU").value.trim();
-            let item = userList.find(x=>x.name===u);
-            if(!item){alert("账号不存在");return;}
-            if(item.admin){alert("不能删管理员");return;}
-            if(!confirm("确定删除？"))return;
-            userList = userList.filter(x=>x.name!==u);
-            saveUser();
+            if(u=="CBY"){alert("不能删除管理员");return;}
+            users=users.filter(item=>item.user!=u);
+            saveUsers();
             alert("删除成功");
-            renderUserList();
+            showUserList();
         }
 
-        function renderUserList(){
-            let html = "<h4>📋 所有账号列表</h4>";
-            userList.forEach(i=>{
+        function showUserList(){
+            let html="";
+            for(let i=0;i<users.length;i++){
                 html+=`<div class="user-item">
-                    <span>账号：${i.name} ${i.admin?"【管理员】":""}</span>
-                    <span>密码：已加密隐藏</span>
-                </div>`;
-            });
-            document.getElementById("userListShow").innerHTML=html;
-        }
-
-        function getTime(){
-            let d=new Date();
-            return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()} ${d.getHours()}:${d.getMinutes()}`;
-        }
-        function loadMsg(){
-            let m=localStorage.getItem("msgList");
-            if(m)msgList=JSON.parse(m);
-        }
-        function saveMsg(){
-            localStorage.setItem("msgList",JSON.stringify(msgList));
-        }
-
-        function sendMsg(){
-            let t=document.getElementById("msgTxt").value.trim();
-            if(!t){alert("留言不能为空");return;}
-            msgList.push({user:nowLoginUser,time:getTime(),content:t});
-            saveMsg();
-            renderMsg();
-            document.getElementById("msgTxt").value="";
-        }
-
-        function renderMsg(){
-            let b=document.getElementById("msgList");
-            b.innerHTML="";
-            for(let i=msgList.length-1;i>=0;i--){
-                let i2=msgList[i];
-                let btn=isAdmin?`<button class="del-msg-btn" onclick="delMsg(${i})">删除留言</button>`:"";
-                b.innerHTML+=`
-                <div class="msg-item">
-                    <div class="msg-info">发布人：${i2.user}｜时间：${i2.time}</div>
-                    <div class="msg-content">${i2.content}</div>
-                    ${btn}
+                    ${users[i].user} ${users[i].admin?"[管理员]":""}
                 </div>`;
             }
+            document.getElementById("userList").innerHTML=html;
+        }
+
+        // ========== 留言 ==========
+        function postMsg(){
+            let c = document.getElementById("content").value.trim();
+            if(!c)return;
+            msgs.push({
+                name:loginName,
+                time:new Date().toLocaleString(),
+                content:c
+            });
+            localStorage.setItem("msgs",JSON.stringify(msgs));
+            showMsgs();
+            document.getElementById("content").value="";
+        }
+
+        function loadMsgs(){
+            let m=localStorage.getItem("msgs");
+            if(m)msgs=JSON.parse(m);
+        }
+
+        function showMsgs(){
+            let html="";
+            for(let i=msgs.length-1;i>=0;i--){
+                let del=isAdmin?`<button class="del-msg-btn" onclick="delMsg(${i})">删除</button>`:"";
+                html+=`<div class="msg-item">
+                    <div class="msg-info">${msgs[i].name} ${msgs[i].time}</div>
+                    <div class="msg-content">${msgs[i].content}</div>
+                    ${del}
+                </div>`;
+            }
+            document.getElementById("msgList").innerHTML=html;
         }
 
         function delMsg(i){
-            if(!confirm("确定删除？"))return;
-            msgList.splice(i,1);
-            saveMsg();
-            renderMsg();
+            msgs.splice(i,1);
+            localStorage.setItem("msgs",JSON.stringify(msgs));
+            showMsgs();
         }
     </script>
 </body>
